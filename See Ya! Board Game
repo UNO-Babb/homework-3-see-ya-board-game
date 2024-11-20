@@ -1,0 +1,129 @@
+import random
+
+# Initialize the board
+def initialize_board():
+    with open("board.txt", "w") as file:
+        for i in range(1, 51):
+            file.write(f"{i}. -\n")
+
+# Load the board state
+def load_board():
+    with open("board.txt", "r") as file:
+        return [line.strip() for line in file.readlines()]
+
+# Update the board state
+def update_board(board):
+    with open("board.txt", "w") as file:
+        for line in board:
+            file.write(line + "\n")
+
+# Choose player colors
+def choose_color(available_colors):
+    print("Choose your color:", available_colors)
+    color = input("Enter your color: ").capitalize()
+    while color not in available_colors:
+        print("Invalid color! Choose from:", available_colors)
+        color = input("Enter your color: ").capitalize()
+    available_colors.remove(color)
+    return color
+
+# Roll a 10-sided die
+def dice_roll():
+    return random.randint(1, 10)
+
+# Move player to a new position
+def move_player(board, player, new_pos):
+    for i in range(len(board)):
+        if player in board[i]:
+            board[i] = board[i].replace(player, "-")
+            break
+    board[new_pos - 1] = f"{board[new_pos - 1].split('.')[0]}. {player}"
+    return board
+
+# Swap players
+def player_swap(board, current_player):
+    print("Select a player to swap with:")
+    other_players = [p.split(",")[0].strip() for b in board for p in b.split(".")[1].split(",") if p.strip() != current_player]
+    print("Available players:", other_players)
+    target = input("Enter the player to swap with: ").capitalize()
+    while target not in other_players:
+        print("Invalid choice. Try again.")
+        target = input("Enter the player to swap with: ").capitalize()
+    current_pos = next(i for i, b in enumerate(board) if current_player in b)
+    target_pos = next(i for i, b in enumerate(board) if target in b)
+    board[current_pos] = board[current_pos].replace(current_player, target)
+    board[target_pos] = board[target_pos].replace(target, current_player)
+    return board
+
+# Skip the next player's turn
+def skip(turn_order, current_index):
+    return (current_index + 2) % len(turn_order)
+
+# Roll two more times
+def roll_twice():
+    return dice_roll(), dice_roll()
+
+# Send a player back to start
+def send_back(board, player):
+    return move_player(board, player, 1)
+
+# Check for a winner
+def check_winner(board):
+    for line in board:
+        if "50." in line and "-" not in line:
+            return line.split(".")[1].strip()
+    return None
+
+# Main game loop
+def play_game():
+    initialize_board()
+    board = load_board()
+    print("Welcome to See Ya!")
+    available_colors = ["Red", "Yellow", "Green", "Blue", "Orange"]
+    players = [choose_color(available_colors) for _ in range(int(input("How many players? (2-5): ")))]
+    positions = {player: 1 for player in players}
+    turn_order = players[:]
+    current_index = 0
+
+    while True:
+        board = load_board()
+        current_player = turn_order[current_index]
+        print(f"\n{current_player}'s turn!")
+        input("Press Enter to roll the die...")
+        roll = dice_roll()
+        print(f"You rolled a {roll}!")
+
+        if roll <= 5:
+            positions[current_player] += roll
+            positions[current_player] = min(positions[current_player], 50)
+            board = move_player(board, current_player, positions[current_player])
+        elif roll == 6:
+            board = player_swap(board, current_player)
+        elif roll == 7:
+            current_index = skip(turn_order, current_index)
+        elif roll == 8:
+            rolls = roll_twice()
+            print(f"Extra rolls: {rolls}")
+            for r in rolls:
+                positions[current_player] += r
+                positions[current_player] = min(positions[current_player], 50)
+                board = move_player(board, current_player, positions[current_player])
+        elif roll == 9:
+            positions[current_player] = 1
+            board = send_back(board, current_player)
+        elif roll == 10:
+            positions[current_player] += 10
+            positions[current_player] = min(positions[current_player], 50)
+            board = move_player(board, current_player, positions[current_player])
+
+        update_board(board)
+        winner = check_winner(board)
+        if winner:
+            print(f"\n{winner} wins! See Ya!")
+            break
+
+        current_index = (current_index + 1) % len(turn_order)
+
+# Run the game
+if __name__ == "__main__":
+    play_game()
