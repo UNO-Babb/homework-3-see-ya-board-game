@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>See Ya! - Game Board</title>
+    <style>
+        .board {
+            display: grid;
+            grid-template-columns: repeat(10, 50px);
+            grid-auto-rows: 50px;
+            gap: 5px;
+            margin: 20px auto;
+        }
+        .tile {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #000;
+            background-color: #f4f4f4;
+        }
+        .actions {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>See Ya! Game Board</h1>
+    <h2>Current Player: {{ current_player }}</h2>
+    {% if dice_roll %}
+    <h3>You rolled a {{ dice_roll }}</h3>
+    {% endif %}
+    {% if action_message %}
+    <p>{{ action_message }}</p>
+    {% endif %}
+    <div class="board">
+        {% for space in board %}
+        <div class="tile">{{ space }}</div>
+        {% endfor %}
+    </div>
+    <form method="POST">
+        <button type="submit">Roll Dice</button>
+    </form>
+    <div class="actions">
+        <h3>Dice Actions:</h3>
+        <ul>
+            {% for number, description in actions.items() %}
+            <li><strong>{{ number }}</strong>: {{ description }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+</body>
+</html>

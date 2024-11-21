@@ -1,129 +1,128 @@
+from flask import Flask, render_template, request, redirect, url_for, session
 import random
 
-# Initialize the board
+app = Flask(__name__)
+app.secret_key = "seeya_game_secret"
+
+# Constants
+NUM_SPACES = 50
+COLORS = ["Red", "Blue", "Green", "Yellow", "Orange"]
+ACTIONS = {
+    6: "Swap your pawn with another player's pawn.",
+    7: "Skip the next player's turn.",
+    8: "Roll the dice two more times.",
+    9: "Go back to the start.",
+    10: "Move forward 10 spaces."
+}
+
+# Helper functions
 def initialize_board():
-    with open("board.txt", "w") as file:
-        for i in range(1, 51):
-            file.write(f"{i}. -\n")
+    """Initialize the game board with 50 spaces."""
+    return [f"{i+1}. -" for i in range(NUM_SPACES)]
 
-# Load the board state
-def load_board():
-    with open("board.txt", "r") as file:
-        return [line.strip() for line in file.readlines()]
 
-# Update the board state
-def update_board(board):
-    with open("board.txt", "w") as file:
-        for line in board:
-            file.write(line + "\n")
+def move_player(board, player_color, steps):
+    """Move the player forward or backward."""
+    current_position = find_player_position(board, player_color)
+    new_position = current_position + steps if steps >= 0 else 0
 
-# Choose player colors
-def choose_color(available_colors):
-    print("Choose your color:", available_colors)
-    color = input("Enter your color: ").capitalize()
-    while color not in available_colors:
-        print("Invalid color! Choose from:", available_colors)
-        color = input("Enter your color: ").capitalize()
-    available_colors.remove(color)
-    return color
+    # Remove player from current position
+    if current_position >= 0:
+        board[current_position] = board[current_position].replace(
+            f"{player_color}, ", "").replace(f", {player_color}", "").replace(player_color, "-")
 
-# Roll a 10-sided die
-def dice_roll():
-    return random.randint(1, 10)
+    # Add player to the new position
+    if new_position >= NUM_SPACES:
+        new_position = NUM_SPACES - 1  # Limit to the last space
+    if board[new_position].endswith("-"):
+        board[new_position] = board[new_position].replace("-", player_color)
+    else:
+        board[new_position] += f", {player_color}"
 
-# Move player to a new position
-def move_player(board, player, new_pos):
-    for i in range(len(board)):
-        if player in board[i]:
-            board[i] = board[i].replace(player, "-")
-            break
-    board[new_pos - 1] = f"{board[new_pos - 1].split('.')[0]}. {player}"
-    return board
+    return board, new_position
 
-# Swap players
-def player_swap(board, current_player):
-    print("Select a player to swap with:")
-    other_players = [p.split(",")[0].strip() for b in board for p in b.split(".")[1].split(",") if p.strip() != current_player]
-    print("Available players:", other_players)
-    target = input("Enter the player to swap with: ").capitalize()
-    while target not in other_players:
-        print("Invalid choice. Try again.")
-        target = input("Enter the player to swap with: ").capitalize()
-    current_pos = next(i for i, b in enumerate(board) if current_player in b)
-    target_pos = next(i for i, b in enumerate(board) if target in b)
-    board[current_pos] = board[current_pos].replace(current_player, target)
-    board[target_pos] = board[target_pos].replace(target, current_player)
-    return board
 
-# Skip the next player's turn
-def skip(turn_order, current_index):
-    return (current_index + 2) % len(turn_order)
+def find_player_position(board, player_color):
+    """Find the position of a player's pawn on the board."""
+    for i, space in enumerate(board):
+        if player_color in space:
+            return i
+    return -1
 
-# Roll two more times
-def roll_twice():
-    return dice_roll(), dice_roll()
 
-# Send a player back to start
-def send_back(board, player):
-    return move_player(board, player, 1)
+# Routes
+@app.route("/", methods=["GET", "POST"])
+def index():
+    """Homepage to choose the number of players and assign colors."""
+    if request.method == "POST":
+        num_players = int(request.form["num_players"])
+        session["players"] = COLORS[:num_players]
+        session["board"] = initialize_board()
+        session["turn_index"] = 0
+        session["skip_next"] = False
+        return redirect(url_for("game"))
+    return render_template("index.html", max_players=len(COLORS))
 
-# Check for a winner
-def check_winner(board):
-    for line in board:
-        if "50." in line and "-" not in line:
-            return line.split(".")[1].strip()
-    return None
 
-# Main game loop
-def play_game():
-    initialize_board()
-    board = load_board()
-    print("Welcome to See Ya!")
-    available_colors = ["Red", "Yellow", "Green", "Blue", "Orange"]
-    players = [choose_color(available_colors) for _ in range(int(input("How many players? (2-5): ")))]
-    positions = {player: 1 for player in players}
-    turn_order = players[:]
-    current_index = 0
+@app.route("/game", methods=["GET", "POST"])
+def game():
+    """Main game board view."""
+    players = session.get("players", [])
+    board = session.get("board", [])
+    turn_index = session.get("turn_index", 0)
+    skip_next = session.get("skip_next", False)
+    current_player = players[turn_index]
+    dice_roll = None
+    action_message = None
 
-    while True:
-        board = load_board()
-        current_player = turn_order[current_index]
-        print(f"\n{current_player}'s turn!")
-        input("Press Enter to roll the die...")
-        roll = dice_roll()
-        print(f"You rolled a {roll}!")
+    if request.method == "POST":
+        # Handle dice roll
+        dice_roll = random.randint(1, 10)
+        if skip_next:
+            action_message = f"{current_player}'s turn is skipped."
+            session["skip_next"] = False
+        else:
+            if dice_roll <= 5 or dice_roll == 10:  # Move forward
+                steps = dice_roll
+                board, _ = move_player(board, current_player, steps)
+            elif dice_roll == 6:  # Swap
+                action_message = "You rolled a 6! Choose another player to swap pawns."
+            elif dice_roll == 7:  # Skip next player's turn
+                action_message = "You rolled a 7! The next player's turn is skipped."
+                session["skip_next"] = True
+            elif dice_roll == 8:  # Roll twice
+                action_message = "You rolled an 8! Roll the dice two more times."
+                extra_roll_1 = random.randint(1, 5)
+                extra_roll_2 = random.randint(1, 5)
+                board, _ = move_player(board, current_player, extra_roll_1 + extra_roll_2)
+            elif dice_roll == 9:  # Go back to start
+                board, _ = move_player(board, current_player, -50)  # Send back to start
 
-        if roll <= 5:
-            positions[current_player] += roll
-            positions[current_player] = min(positions[current_player], 50)
-            board = move_player(board, current_player, positions[current_player])
-        elif roll == 6:
-            board = player_swap(board, current_player)
-        elif roll == 7:
-            current_index = skip(turn_order, current_index)
-        elif roll == 8:
-            rolls = roll_twice()
-            print(f"Extra rolls: {rolls}")
-            for r in rolls:
-                positions[current_player] += r
-                positions[current_player] = min(positions[current_player], 50)
-                board = move_player(board, current_player, positions[current_player])
-        elif roll == 9:
-            positions[current_player] = 1
-            board = send_back(board, current_player)
-        elif roll == 10:
-            positions[current_player] += 10
-            positions[current_player] = min(positions[current_player], 50)
-            board = move_player(board, current_player, positions[current_player])
+        # Check for win condition
+        if find_player_position(board, current_player) == NUM_SPACES - 1:
+            return f"Congratulations! {current_player} wins!"
 
-        update_board(board)
-        winner = check_winner(board)
-        if winner:
-            print(f"\n{winner} wins! See Ya!")
-            break
+        # Update turn
+        session["turn_index"] = (turn_index + 1) % len(players)
+        session["board"] = board
 
-        current_index = (current_index + 1) % len(turn_order)
+    return render_template(
+        "game.html",
+        board=board,
+        players=players,
+        current_player=current_player,
+        dice_roll=dice_roll,
+        action_message=action_message,
+        actions=ACTIONS
+    )
 
-# Run the game
+
 if __name__ == "__main__":
-    play_game()
+    app.run(debug=True)
+
+
+
+
+
+
+
